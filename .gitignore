@@ -1,3 +1,11 @@
+# macos
+.DS_Store
+
+# nn artifacts
+*.tflite
+*.onnx
+*.pb/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

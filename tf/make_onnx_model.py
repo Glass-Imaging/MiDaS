@@ -36,10 +36,10 @@ def restore_file():
 modify_file()
 
 from midas.midas_net import MidasNet
+from midas.midas_net_custom import MidasNet_small
 from midas.transforms import Resize, NormalizeImage, PrepareForNet
 
 restore_file()
-
 
 class MidasNet_preprocessing(MidasNet):
     """Network for monocular depth estimation.
@@ -54,12 +54,33 @@ class MidasNet_preprocessing(MidasNet):
             tensor: depth
         """
 
-        mean = torch.tensor([0.485, 0.456, 0.406])
-        std = torch.tensor([0.229, 0.224, 0.225])
-        x.sub_(mean[None, :, None, None]).div_(std[None, :, None, None])
+        # TFLite Android likes NHWC Inputs, ONNX generates NCHW models
+        x = x.permute(0, 3, 1, 2) # NHWC -> NCHW
+
+        # mean = torch.tensor([0.485, 0.456, 0.406])
+        # std = torch.tensor([0.229, 0.224, 0.225])
+        # x.sub_(mean[None, :, None, None]).div_(std[None, :, None, None])
 
         return MidasNet.forward(self, x)
 
+class MidasNet_small_preprocessing(MidasNet_small):
+    """Network for monocular depth estimation.
+    """
+
+    def forward(self, x):
+        """Forward pass.
+
+        Args:
+            x (tensor): input data (image)
+
+        Returns:
+            tensor: depth
+        """
+
+        # TFLite Android likes NHWC Inputs, ONNX generates NCHW models
+        x = x.permute(0, 3, 1, 2) # NHWC -> NCHW
+
+        return MidasNet_small.forward(self, x)
 
 def run(model_path):
     """Run MonoDepthNN to compute depth maps.
@@ -72,19 +93,23 @@ def run(model_path):
     # select device
 
     # load network
-    #model = MidasNet(model_path, non_negative=True)
+    # model = MidasNet(model_path, non_negative=True)
     model = MidasNet_preprocessing(model_path, non_negative=True)
+    # model = MidasNet_small_preprocessing(path=model_path, features=64, backbone="efficientnet_lite3", exportable=True, non_negative=True, align_corners=False, blocks={'expand': True})
+
+    # model = MidasNet_small(model_path, features=64, backbone="efficientnet_lite3", exportable=True, non_negative=True, align_corners=False, blocks={'expand': True})
 
     model.eval()
     
     print("start processing")
 
     # input
-    img_input = np.zeros((3, 384, 384), np.float32)  
+    img_input = np.zeros((3, 768, 1024), np.float32)
 
     # compute
     with torch.no_grad():
         sample = torch.from_numpy(img_input).unsqueeze(0)
+        sample = sample.permute(0, 2, 3, 1)
         prediction = model.forward(sample)
         prediction = (
             torch.nn.functional.interpolate(
@@ -106,7 +131,8 @@ def run(model_path):
 if __name__ == "__main__":
     # set paths
     # MODEL_PATH = "model.pt"
-    MODEL_PATH = "../model-f6b98070.pt"
+    MODEL_PATH = "../weights/midas_v21-f6b98070.pt"
+    # MODEL_PATH = "/Users/fabio/work/MiDaS/weights/midas_v21_small-70d6b9c8.pt"
     
     # compute depth maps
     run(MODEL_PATH)
